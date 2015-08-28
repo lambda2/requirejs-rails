@@ -173,6 +173,7 @@ OS X Homebrew users can use 'brew install node'.
         digest_name = asset.logical_path.gsub(path_extension_pattern) { |ext| "-#{hex_digest}#{ext}" }
 
         digest_asset_path = requirejs.config.target_dir + digest_name
+        non_digest_asset_path = requirejs.config.target_dir + asset_name
 
         # Ensure that the parent directory `a/b` for modules with names like `a/b/c` exist.
         digest_asset_path.dirname.mkpath
@@ -188,8 +189,27 @@ OS X Homebrew users can use 'brew install node'.
         end
         FileUtils.cp "#{built_asset_path}.gz", "#{digest_asset_path}.gz"
 
+        # Copy source maps if generateSourceMaps is enabled
+        if requirejs.config.build_config['generateSourceMaps']
+          FileUtils.cp "#{built_asset_path}.map", "#{non_digest_asset_path}.map"
+        end
+
         requirejs.config.manifest_path.open('wb') do |f|
           YAML.dump(requirejs.manifest, f)
+        end
+      end
+
+      # Copy original versions of assets to support source maps.
+      # If any of these files were in the precompile list, the copied file and
+      # the source map will point to the compressed version due to sprokets caching.
+      if requirejs.config.build_config['generateSourceMaps']
+        requirejs.env.each_logical_path do |logical_path|
+          next unless requirejs.config.asset_allowed?(logical_path)
+          if asset = requirejs.env.find_asset(logical_path)
+            filename = requirejs.config.target_dir + asset.logical_path
+            filename.dirname.mkpath
+            asset.write_to(filename)
+          end
         end
       end
     end
